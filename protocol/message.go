@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 
@@ -15,7 +14,7 @@ type Message struct {
 	RawEntries [][]byte
 }
 
-func (p *Packet) Read(reader *bufio.Reader) (err error) {
+func (p *Packet) Read(reader io.Reader) (err error) {
 	headBuf := make([]byte, 4)
 	_, err = io.ReadFull(reader, headBuf)
 	if err != nil {
@@ -34,14 +33,18 @@ func (p *Packet) Read(reader *bufio.Reader) (err error) {
 	return
 }
 
-func (p *Packet) Write(writer *bufio.Writer) (err error) {
-	body, err := proto.Marshal(p)
+func (p *Packet) Write(writer io.Writer) (err error) {
+	var body []byte
+	body, err = proto.Marshal(p)
 	if err != nil {
 		return
 	}
 	headBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(headBuf, uint32(len(body)))
-	writer.Write(headBuf)
-	writer.Write(body)
+	_, err = writer.Write(headBuf)
+	if err != nil {
+		return
+	}
+	_, err = writer.Write(body)
 	return
 }

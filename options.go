@@ -5,19 +5,19 @@ import (
 )
 
 type Options struct {
-	// host:port address.
-	Addr         string
+	Address      string // host:port address.
 	Username     string
 	Password     string
 	Destination  int
+	ClientID     string
 	DialTimeout  time.Duration
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 }
 
 func (opt *Options) init() {
-	if opt.Addr == "" {
-		opt.Addr = "localhost:6379"
+	if opt.Address == "" {
+		opt.Address = "localhost:6379"
 	}
 
 	if opt.DialTimeout == 0 {
