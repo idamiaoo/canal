@@ -4,23 +4,24 @@ import (
 	"time"
 )
 
-type Options struct {
-	Address      string // host:port address.
-	Username     string
-	Password     string
-	Destination  int
-	ClientID     string
-	DialTimeout  time.Duration
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
+type clientOptions struct {
+	destination          string
+	clientID             int
+	dialTimeout          time.Duration
+	readTimeout          time.Duration
+	writeTimeout         time.Duration
+	lazyParseEntry       bool
+	rollbackOnConnect    bool
+	rollbackOnDisConnect bool
 }
 
-func (opt *Options) init() {
-	if opt.Address == "" {
-		opt.Address = "localhost:6379"
+func defaultClientOptions() clientOptions {
+	return clientOptions{
+		dialTimeout: 5 * time.Second,
 	}
+}
 
-	if opt.DialTimeout == 0 {
-		opt.DialTimeout = 5 * time.Second
-	}
+// ClientOption .
+type ClientOption interface {
+	apply(*clientOptions)
 }

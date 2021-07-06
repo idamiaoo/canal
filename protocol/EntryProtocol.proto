@@ -1,10 +1,11 @@
 syntax = "proto3";
-package com.alibaba.otter.canal.protocol;
+
+package canal.protocol;
 
 option java_package = "com.alibaba.otter.canal.protocol";
 option java_outer_classname = "CanalEntry";
-option optimize_for = SPEED;
 option go_package = "github.com/go-canal/canal/protocol;protocol";
+option optimize_for = SPEED;
 
 /****************************************************************
  * message model
