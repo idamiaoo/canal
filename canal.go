@@ -3,14 +3,14 @@ package canal
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
-	"sync"
 	"time"
 
-	"google.golang.org/protobuf/proto"
+	"github.com/katakurin/canal/protobuf/protocol"
 
-	"github.com/go-canal/canal/protocol"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -20,17 +20,11 @@ var (
 )
 
 type Client struct {
-	opts            clientOptions
-	addr            string // host:port address.
-	username        string
-	password        string
-	netConn         net.Conn
-	readableChannel chan *protocol.Packet
-	writableChannel chan *protocol.Packet
-	connected       uint32
-	clientIdentity  clientIdentity
-	mutex           sync.Mutex
-	closeSingle     chan struct{}
+	opts           clientOptions
+	addr           string // host:port address.
+	netConn        net.Conn
+	connected      uint32
+	clientIdentity clientIdentity
 }
 
 type clientIdentity struct {
@@ -39,7 +33,7 @@ type clientIdentity struct {
 	filter      string
 }
 
-func NewClient(addr, username, password string, opts ...ClientOption) (*Client, error) {
+func NewClient(addr, destination string, opts ...ClientOption) (*Client, error) {
 	cc := &Client{
 		opts: defaultClientOptions(),
 		addr: addr,
@@ -49,13 +43,18 @@ func NewClient(addr, username, password string, opts ...ClientOption) (*Client, 
 		opt.apply(&cc.opts)
 	}
 	cc.clientIdentity = clientIdentity{
-		clientId:    cc.opts.clientID,
-		destination: cc.opts.destination,
+		clientId:    1001,
+		destination: destination,
+	}
+
+	if err := cc.connect(); err != nil {
+		return nil, err
 	}
 
 	if err := cc.handshake(); err != nil {
 		return nil, err
 	}
+
 	return cc, nil
 }
 
@@ -66,38 +65,6 @@ func (c *Client) connect() error {
 	}
 
 	c.netConn = conn
-	c.readableChannel = make(chan *protocol.Packet, 64)
-	c.writableChannel = make(chan *protocol.Packet, 64)
-
-	go func() {
-		for {
-			select {
-			case <-c.closeSingle:
-				return
-			default:
-
-			}
-			var packet protocol.Packet
-			if err := packet.Read(c.netConn); err != nil {
-				c.disconnect()
-			}
-			c.readableChannel <- &packet
-		}
-	}()
-
-	go func() {
-		for {
-			select {
-			case packet := <-c.readableChannel:
-				if err := packet.Write(c.netConn); err != nil {
-					c.disconnect()
-				}
-			case <-c.closeSingle:
-				return
-			}
-		}
-	}()
-
 	return nil
 }
 
@@ -133,12 +100,12 @@ func (c *Client) handshake() error {
 		return err
 	}
 	seed := handshake.GetSeeds()
-	newPasswd := c.password
+	newPasswd := c.opts.password
 	if newPasswd != "" {
 		newPasswd = hex.EncodeToString(Scramble411([]byte(newPasswd), seed))
 	}
 	clientAuth := &protocol.ClientAuth{
-		Username:               c.username,
+		Username:               c.opts.username,
 		Password:               []byte(newPasswd),
 		NetReadTimeoutPresent:  &protocol.ClientAuth_NetReadTimeout{NetReadTimeout: int32(c.opts.readTimeout.Seconds())},
 		NetWriteTimeoutPresent: &protocol.ClientAuth_NetWriteTimeout{NetWriteTimeout: int32(c.opts.writeTimeout.Seconds())},
@@ -152,10 +119,10 @@ func (c *Client) handshake() error {
 		return err
 	}
 
-	packet.Reset()
 	if err := c.readPacket(packet); err != nil {
 		return err
 	}
+
 	if packet.GetType() != protocol.PacketType_ACK {
 		return ErrUnexpectedPacket
 	}
@@ -163,6 +130,7 @@ func (c *Client) handshake() error {
 	if err := proto.Unmarshal(packet.GetBody(), &ack); err != nil {
 		return err
 	}
+	fmt.Println(ack.String())
 	if ack.GetErrorCode() > 0 {
 		return errors.New("something goes wrong when doing authentication: " + ack.GetErrorMessage())
 	}
@@ -264,7 +232,7 @@ func (c *Client) Rollback(batchID int64) error {
 	return nil
 }
 
-func (c *Client) Get(batchSize int, timeout time.Duration) (*protocol.Message, error) {
+func (c *Client) Get(batchSize int, timeout time.Duration) (*Message, error) {
 	message, err := c.GetWithOutAck(batchSize, timeout)
 	if err != nil {
 		return nil, err
@@ -275,7 +243,7 @@ func (c *Client) Get(batchSize int, timeout time.Duration) (*protocol.Message, e
 	return message, nil
 }
 
-func (c *Client) GetWithOutAck(batchSize int, timeout time.Duration) (*protocol.Message, error) {
+func (c *Client) GetWithOutAck(batchSize int, timeout time.Duration) (*Message, error) {
 	packet := &protocol.Packet{}
 
 	get := &protocol.Get{
@@ -297,7 +265,7 @@ func (c *Client) GetWithOutAck(batchSize int, timeout time.Duration) (*protocol.
 		return nil, err
 	}
 
-	message, err := packet.ParseMessage(c.opts.lazyParseEntry)
+	message, err := ParseMessage(packet, c.opts.lazyParseEntry)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +274,8 @@ func (c *Client) GetWithOutAck(batchSize int, timeout time.Duration) (*protocol.
 }
 
 func (c *Client) readPacket(p *protocol.Packet) error {
+	p.Reset()
+
 	if err := p.Read(c.netConn); err != nil {
 		return err
 	}

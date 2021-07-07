@@ -5,8 +5,9 @@ import (
 )
 
 type clientOptions struct {
-	destination          string
 	clientID             int
+	username             string
+	password             string
 	dialTimeout          time.Duration
 	readTimeout          time.Duration
 	writeTimeout         time.Duration
@@ -24,4 +25,24 @@ func defaultClientOptions() clientOptions {
 // ClientOption .
 type ClientOption interface {
 	apply(*clientOptions)
+}
+
+type funcClientOption struct {
+	f func(*clientOptions)
+}
+
+func (fco *funcClientOption) apply(co *clientOptions) {
+	fco.f(co)
+}
+
+func newFuncDialOption(f func(*clientOptions)) *funcClientOption {
+	return &funcClientOption{
+		f: f,
+	}
+}
+
+func EnableLazyParseEntry() ClientOption {
+	return newFuncDialOption(func(o *clientOptions) {
+		o.lazyParseEntry = true
+	})
 }

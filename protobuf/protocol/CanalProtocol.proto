@@ -1,10 +1,8 @@
 syntax = "proto3";
-package com.alibaba.otter.canal.protocol;
+package protocol;
 
-option java_package = "com.alibaba.otter.canal.protocol";
-option java_outer_classname = "CanalPacket";
 option optimize_for = SPEED;
-option go_package = "github.com/go-canal/canal/protocol;protocol";
+option go_package = "github.com/katakurin/canal/protobuf/protocol;protocol";
 
 enum Compression {
   COMPRESSIONCOMPATIBLEPROTO2 = 0;
